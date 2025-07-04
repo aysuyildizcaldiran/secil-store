@@ -23,11 +23,32 @@ interface Meta {
   hasNextPage: boolean;
 }
 
+interface Product {
+  productCode: string;
+  name: string;
+  imgUrl: string;
+}
+
+interface FilterData {
+  id: string;
+  title: string;
+  values: Array<{
+    value: string;
+    valueName: string | null;
+  }>;
+  currency: string | null;
+  comparisonType: number;
+}
+
 interface CollectionState {
   collections: Collection[];
   meta: Meta | null;
   page: number;
   openProducts: { [key: string]: any[] };
+  allProducts: Product[];
+  constants: Product[];
+  filterData: FilterData[];
+  loadingFilters: boolean;
   loading: boolean;
   loadingProducts: string | null;
   error: string | null;
@@ -38,6 +59,10 @@ const initialState: CollectionState = {
   meta: null,
   page: 1,
   openProducts: {},
+  allProducts: [],
+  constants: [],
+  filterData: [],
+  loadingFilters: false,
   loading: false,
   loadingProducts: null,
   error: null,
@@ -87,6 +112,76 @@ export const fetchCollectionProducts = createAsyncThunk(
   }
 );
 
+export const fetchProductsForConstants = createAsyncThunk(
+  'collection/fetchProductsForConstants',
+  async (
+    { token, collectionId, additionalFilters = [] }: { 
+      token: string; 
+      collectionId: string; 
+      additionalFilters?: any[] 
+    },
+    { rejectWithValue }
+  ) => {
+    try {
+      const res = await fetch(
+        `https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetProductsForConstants`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ additionalFilters, page: 1, pageSize: 36 }),
+        }
+      );
+      const data = await res.json();
+      const products = (data?.data?.data || []).map((item: any) => ({
+        productCode: item.productCode,
+        name: item.name,
+        imgUrl: item.imageUrl,
+      }));
+      return products;
+    } catch (err) {
+      return rejectWithValue('Ürünler yüklenemedi.');
+    }
+  }
+);
+
+export const fetchFiltersForConstants = createAsyncThunk(
+  'collection/fetchFiltersForConstants',
+  async (
+    { token, collectionId }: { token: string; collectionId: string },
+    { rejectWithValue }
+  ) => {
+    try {
+      const response = await fetch(
+        `https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetFiltersForConstants`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 200) {
+        return data.data;
+      } else {
+        throw new Error(data.message || 'Filtre verileri alınamadı');
+      }
+    } catch (err) {
+      return rejectWithValue(err instanceof Error ? err.message : 'Bilinmeyen bir hata oluştu');
+    }
+  }
+);
+
 const collectionSlice = createSlice({
   name: 'collection',
   initialState,
@@ -96,6 +191,27 @@ const collectionSlice = createSlice({
     },
     clearProducts(state, action) {
       delete state.openProducts[action.payload];
+    },
+    setConstants(state, action) {
+      state.constants = action.payload;
+    },
+    addToConstants(state, action) {
+      state.constants.push(action.payload);
+    },
+    removeFromConstants(state, action) {
+      state.constants = state.constants.filter(p => p.productCode !== action.payload);
+    },
+    clearConstants(state) {
+      state.constants = [];
+    },
+    clearAllProducts(state) {
+      state.allProducts = [];
+    },
+    removeFromAllProducts(state, action) {
+      state.allProducts = state.allProducts.filter(p => p.productCode !== action.payload);
+    },
+    addToAllProducts(state, action) {
+      state.allProducts.push(action.payload);
     },
   },
   extraReducers: (builder) => {
@@ -124,9 +240,44 @@ const collectionSlice = createSlice({
       .addCase(fetchCollectionProducts.rejected, (state, action) => {
         state.loadingProducts = null;
         state.error = action.payload as string;
+      })
+      .addCase(fetchProductsForConstants.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchProductsForConstants.fulfilled, (state, action) => {
+        state.loading = false;
+        state.allProducts = action.payload;
+        state.constants = [];
+      })
+      .addCase(fetchProductsForConstants.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(fetchFiltersForConstants.pending, (state) => {
+        state.loadingFilters = true;
+        state.error = null;
+      })
+      .addCase(fetchFiltersForConstants.fulfilled, (state, action) => {
+        state.loadingFilters = false;
+        state.filterData = action.payload;
+      })
+      .addCase(fetchFiltersForConstants.rejected, (state, action) => {
+        state.loadingFilters = false;
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { setPage, clearProducts } = collectionSlice.actions;
+export const { 
+  setPage, 
+  clearProducts, 
+  setConstants, 
+  addToConstants, 
+  removeFromConstants, 
+  clearConstants, 
+  clearAllProducts,
+  removeFromAllProducts,
+  addToAllProducts
+} = collectionSlice.actions;
 export default collectionSlice.reducer;

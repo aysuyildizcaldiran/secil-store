@@ -17,14 +17,12 @@ import {
   Alert,
   IconButton,
 } from '@mui/material'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import LogoutIcon from '@mui/icons-material/Logout'
 import {
   fetchCollections,
-  fetchCollectionProducts,
   setPage,
-  clearProducts,
 } from '../../store/slices/collection'
+import { logout } from '../../store/slices/authSlice'
 
 interface FilterItem {
   id: string
@@ -76,23 +74,29 @@ export default function CollectionsPage() {
     router.push(`/edit?id=${id}`);
   };
 
-  const handleShowProducts = (collectionId: string | number) => {
-    if (openProducts[collectionId]) {
-      dispatch(clearProducts(collectionId));
-      return;
-    }
-    if (token) {
-      dispatch(fetchCollectionProducts({ token, collectionId }));
-    }
+  const handleLogout = () => {
+    dispatch(logout());
+    router.push('/');
   };
 
   if (!token) return null;
 
   return (
     <Box p={4}>
-      <Typography variant="h4" fontWeight="bold" mb={4}>
-        Koleksiyon Listesi
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+        <Typography variant="h4" fontWeight="bold">
+          Koleksiyon Listesi
+        </Typography>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<LogoutIcon />}
+          onClick={handleLogout}
+          sx={{ fontWeight: 'bold', borderRadius: 2 }}
+        >
+          Çıkış Yap
+        </Button>
+      </Box>
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
       )}
@@ -171,7 +175,7 @@ export default function CollectionsPage() {
           ))
         )}
       </Paper>
-      {/* Sayfalama */}
+  
       {meta && (
         <Box display="flex" justifyContent="flex-end" mt={4}>
           <Box display="flex" gap={1}>

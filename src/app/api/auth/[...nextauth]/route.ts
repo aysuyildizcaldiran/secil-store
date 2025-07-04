@@ -7,18 +7,29 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
-        email: { label: 'Email', type: 'email', placeholder: ' aysuyildizcaldiran@gmail.com' },
-        password: { label: 'Şifre', type: 'password' },
+        email: { label: 'Email', type: 'email', placeholder: 'test@example.com' },
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        // Burada gerçek kullanıcı doğrulama yapılmalı
-        if (
-          credentials?.email === 'aysuyildizcaldiran@gmail.com' &&
-          credentials?.password === '$c1cU02v1c@9t9YvX^qOVGL@hxDJji'
-        ) {
-          return { id: '1', name: 'Test User', email: 'aysuyildizcaldiran@gmail.com' };
+        try {
+          const validEmail = process.env.NEXTAUTH_EMAIL;
+          const validPassword = process.env.NEXTAUTH_PASSWORD;
+          
+          if (
+            credentials?.email === validEmail &&
+            credentials?.password === validPassword
+          ) {
+            return { 
+              id: '1', 
+              name: 'Test User', 
+              email: credentials?.email 
+            };
+          }
+          return null;
+        } catch (error) {
+          console.error('Auth error:', error);
+          return null;
         }
-        return null;
       },
     }),
   ],

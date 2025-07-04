@@ -1,4 +1,3 @@
-import './globals.css';
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import ClientLayout from './ClientLayout';

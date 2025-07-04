@@ -45,7 +45,7 @@ export default function LoginPage() {
       <Paper elevation={6} sx={{ p: 4, mt: 10, borderRadius: 3 }}>
         <Box textAlign="center" mb={3}>
           <Typography variant="h4" fontWeight="bold" color="primary">
-            LOGO
+            SecilStore
           </Typography>
           <Typography variant="subtitle1" color="textSecondary">
             Hesabınıza giriş yapın

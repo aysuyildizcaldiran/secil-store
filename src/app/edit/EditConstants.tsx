@@ -13,19 +13,22 @@ import {
   Container,
   Dialog,
   DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  TextField,
-  Checkbox,
-  FormControlLabel,
   IconButton,
   Slide
 } from '@mui/material'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useAppSelector } from '../../store/hooks'
+import { useAppSelector, useAppDispatch } from '../../store/hooks'
+import {
+  fetchProductsForConstants,
+  fetchFiltersForConstants,
+  setConstants,
+  addToConstants,
+  removeFromConstants,
+  clearConstants,
+  clearAllProducts,
+  removeFromAllProducts,
+  addToAllProducts,
+} from '../../store/slices/collection'
 
 import {
   DndContext,
@@ -41,9 +44,9 @@ import {
   arrayMove,
   rectSortingStrategy,
 } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import CloseIcon from '@mui/icons-material/Close'
+import ProductCard from '../components/ProductCard'
+import FilterPanel from '../components/FilterPanel'
 
 interface Product {
   productCode: string
@@ -51,64 +54,7 @@ interface Product {
   imgUrl: string
 }
 
-function ProductCard({
-  product,
-  listeners,
-  attributes,
-  setNodeRef,
-  transform,
-  transition,
-  isDragging,
-}: any) {
-  return (
-    <Card
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      sx={{
-        width: 150,
-        height: 220,
-        opacity: isDragging ? 0.5 : 1,
-        transform: CSS.Transform.toString(transform),
-        transition,
-        cursor: 'move',
-        userSelect: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-      }}
-    >
-      <Box
-        sx={{
-          height: 120,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-        }}
-      >
-        <CardMedia
-          component="img"
-          image={product.imgUrl}
-          alt={product.name}
-          sx={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-          }}
-        />
-      </Box>
-      <CardContent sx={{ textAlign: 'center', p: 1 }}>
-        <Typography variant="subtitle2" fontWeight={600} noWrap>
-          {product.name}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" noWrap>
-          {product.productCode}
-        </Typography>
-      </CardContent>
-    </Card>
-  )
-}
+
 
 function DraggableProduct({ product }: { product: Product }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: product.productCode })
@@ -173,16 +119,19 @@ function SortableProduct({
 function DroppableContainer({ id, children }: { id: string, children: React.ReactNode }) {
   const { setNodeRef } = useDroppable({ id })
   return (
-    <Grid container spacing={2} ref={setNodeRef} minHeight={140}>
+    <Box 
+      display="grid" 
+      gridTemplateColumns="repeat(auto-fill, minmax(150px, 1fr))" 
+      gap={2} 
+      ref={setNodeRef} 
+      minHeight={140}
+    >
       {children}
-    </Grid>
+    </Box>
   )
 }
 
-const years = [2022, 2023, 2024];
-const depots = ['Merkez', 'Şube 1', 'Şube 2'];
-const productCodes = ['PRD001', 'PRD002', 'PRD003'];
-const sortOptions = ['Stok Artan', 'Stok Azalan', 'Yıla Göre'];
+
 
 const Transition = React.forwardRef(function Transition(props: any, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -192,19 +141,19 @@ export default function EditConstants() {
   const searchParams = useSearchParams()
   const collectionId = searchParams.get('id')
   const router = useRouter()
+  const dispatch = useAppDispatch()
   const { token } = useAppSelector((state) => state.auth)
+  const { 
+    allProducts, 
+    constants, 
+    filterData, 
+    loading, 
+    loadingFilters, 
+    error 
+  } = useAppSelector((state) => state.collection)
 
-  const [allProducts, setAllProducts] = useState<Product[]>([])
-  const [constants, setConstants] = useState<Product[]>([])
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filterYear, setFilterYear] = useState('');
-  const [filterDepot, setFilterDepot] = useState('');
-  const [filterProduct, setFilterProduct] = useState('');
-  const [filterSort, setFilterSort] = useState('');
-  const [filterMinStock, setFilterMinStock] = useState('');
-  const [filterMaxStock, setFilterMaxStock] = useState('');
-  const [filterAllSizes, setFilterAllSizes] = useState(false);
-  const [appliedFilters, setAppliedFilters] = useState<any[]>([]);
+  const [appliedFilters, setAppliedFilters] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (!token) {
@@ -213,27 +162,21 @@ export default function EditConstants() {
     }
     if (!collectionId) return
 
-    const fetchProducts = async () => {
-      const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetProductsForConstants`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ additionalFilters: [], page: 1, pageSize: 36 }),
-      })
-      const data = await res.json()
-      const products = (data?.data?.data || []).map((item: any) => ({
-        productCode: item.productCode,
-        name: item.name,
-        imgUrl: item.imageUrl,
+    const additionalFilters = Object.entries(appliedFilters).flatMap(([filterId, values]) =>
+      values.map(value => ({
+        id: filterId,
+        value: value,
+        comparisonType: filterId === 'stock' ? 3 : 0
       }))
-      setAllProducts(products)
-      setConstants([])
-    }
+    );
+    
+    dispatch(fetchProductsForConstants({ token, collectionId, additionalFilters }))
+  }, [collectionId, token, dispatch, appliedFilters])
 
-    fetchProducts()
-  }, [collectionId, token])
+  useEffect(() => {
+    if (!token || !collectionId) return;
+    dispatch(fetchFiltersForConstants({ token, collectionId }));
+  }, [token, collectionId, dispatch]);
 
   const sensors = useSensors(useSensor(PointerSensor))
 
@@ -241,79 +184,105 @@ export default function EditConstants() {
     const { active, over } = event
     if (!over) return
 
-    const isInConstants = constants.some((p) => p.productCode === active.id)
-    const isOverConstants = over.id === 'constants' || constants.some((p) => p.productCode === over.id)
+    const isInConstants = constants.some((p: Product) => p.productCode === active.id)
+    const isOverConstants = over.id === 'constants' || constants.some((p: Product) => p.productCode === over.id)
 
-    if (isInConstants && constants.some((p) => p.productCode === over.id) && active.id !== over.id) {
-      const oldIndex = constants.findIndex((p) => p.productCode === active.id)
-      const newIndex = constants.findIndex((p) => p.productCode === over.id)
-      setConstants((items) => arrayMove(items, oldIndex, newIndex))
+    if (isInConstants && constants.some((p: Product) => p.productCode === over.id) && active.id !== over.id) {
+      const oldIndex = constants.findIndex((p: Product) => p.productCode === active.id)
+      const newIndex = constants.findIndex((p: Product) => p.productCode === over.id)
+      const newConstants = arrayMove(constants, oldIndex, newIndex)
+      dispatch(setConstants(newConstants))
       return
     }
 
-    const draggedItem = allProducts.find((p) => p.productCode === active.id)
+    const draggedItem = allProducts.find((p: Product) => p.productCode === active.id)
     if (
       draggedItem &&
-      !constants.find((p) => p.productCode === draggedItem.productCode) &&
+      !constants.find((p: Product) => p.productCode === draggedItem.productCode) &&
       isOverConstants
     ) {
-      setConstants((prev) => [...prev, draggedItem])
-      setAllProducts((prev) => prev.filter((p) => p.productCode !== draggedItem.productCode))
+      dispatch(addToConstants(draggedItem))
+      dispatch(removeFromAllProducts(draggedItem.productCode))
     }
   }
 
   const handleRemoveConstant = (productCode: string) => {
-    const removed = constants.find((p) => p.productCode === productCode)
+    const removed = constants.find((p: Product) => p.productCode === productCode)
     if (!removed) return
-    setConstants((prev) => prev.filter((p) => p.productCode !== productCode))
-    setAllProducts((prev) => [...prev, removed])
+    dispatch(removeFromConstants(productCode))
+    dispatch(addToAllProducts(removed))
   }
 
   const handleSave = async () => {
     if (!collectionId) return
     const productCodes = constants.map((p) => p.productCode)
 
-   
-
-   
-      alert('Sabitler başarıyla kaydedildi!')
-      router.push('/collections')
+    const constantsList = constants.map((product, index) => 
+      `${index + 1}. ${product.name} (${product.productCode})`
+    ).join('\n');
 
     
+    const alertMessage = constants.length > 0 
+      ? `Sabitler başarıyla kaydedildi!\n\nKaydedilen ürünler:\n${constantsList}`
+      : 'Sabitler başarıyla kaydedildi!\n\nKaydedilen ürün bulunmuyor.';
+
+    const stabilMessage="\nÖrnek bir request PostMan de göremediğim için bu şekilde yazdım."
+    alert(alertMessage + stabilMessage)
+    router.push('/collections')
   }
 
-  const handleApplyFilters = () => {
-    const filters = [];
-    if (filterYear) filters.push({ label: 'Yıl', value: filterYear });
-    if (filterDepot) filters.push({ label: 'Depo', value: filterDepot });
-    if (filterProduct) filters.push({ label: 'Ürün Kodu', value: filterProduct });
-    if (filterMinStock) filters.push({ label: 'Min Stok', value: filterMinStock });
-    if (filterMaxStock) filters.push({ label: 'Max Stok', value: filterMaxStock });
-    if (filterAllSizes) filters.push({ label: 'Tüm Bedenlerde Stok Olanlar', value: 'Evet' });
-    if (filterSort) filters.push({ label: 'Sıralama', value: filterSort });
-    setAppliedFilters(filters);
+  const handleFiltersChange = (filters: Record<string, { values: string[], comparisonType: number }>) => {
+    const simpleFilters: Record<string, string[]> = {};
+    Object.entries(filters).forEach(([filterId, filterData]) => {
+      simpleFilters[filterId] = filterData.values;
+    });
+    
+    setAppliedFilters(simpleFilters);
+    console.log('Uygulanan filtreler:', filters);
     setFilterOpen(false);
-    if (filters.length === 0) {
-      alert('Filtre seçilmedi');
-    } else {
-      alert(filters.map(f => `${f.label}: ${f.value}`).join('\n'));
+    
+    const additionalFilters = Object.entries(filters).flatMap(([filterId, filterData]) =>
+      filterData.values.map(value => ({
+        id: filterId,
+        value: value,
+        comparisonType: filterData.comparisonType
+      }))
+    );
+    
+    console.log('API için hazırlanan filtreler:', additionalFilters);
+    
+    if (collectionId && token) {
+      dispatch(fetchProductsForConstants({ token, collectionId, additionalFilters }));
     }
   };
 
-  const handleClearFilters = () => {
-    setFilterYear('');
-    setFilterDepot('');
-    setFilterProduct('');
-    setFilterSort('');
-    setFilterMinStock('');
-    setFilterMaxStock('');
-    setFilterAllSizes(false);
-    setAppliedFilters([]);
-  };
+
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Box display="flex" justifyContent="flex-end" mb={2}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box>
+          {Object.keys(appliedFilters).length > 0 && (
+            <Box display="flex" alignItems="center" gap={1}>
+              <Typography variant="body2" color="text.secondary">
+                {Object.keys(appliedFilters).length} filtre kategorisi uygulandı
+              </Typography>
+              <Button 
+                size="small" 
+                variant="text" 
+                color="error"
+                onClick={() => {
+                  setAppliedFilters({});
+                  if (collectionId && token) {
+                    dispatch(fetchProductsForConstants({ token, collectionId, additionalFilters: [] }));
+                  }
+                }}
+              >
+                Temizle
+              </Button>
+            </Box>
+          )}
+        </Box>
         <Button variant="outlined" onClick={() => setFilterOpen(true)}>
           Filtrele
         </Button>
@@ -323,128 +292,63 @@ export default function EditConstants() {
         onClose={() => setFilterOpen(false)}
         TransitionComponent={Transition}
         fullWidth
-        maxWidth="md"
+        maxWidth="lg"
         sx={{
           '& .MuiDialog-container': {
             alignItems: 'flex-end',
           },
         }}
         PaperProps={{
-          sx: { borderRadius: '24px 24px 0 0', m: 0, pb: 2 },
+          sx: { borderRadius: '24px 24px 0 0', m: 0, pb: 2, maxHeight: '80vh' },
         }}
       >
-        <DialogContent>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6" fontWeight="bold">Filtreler</Typography>
-            <IconButton onClick={() => setFilterOpen(false)}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Box display="flex" flexWrap="wrap" gap={2}>
-            <FormControl sx={{ minWidth: 160 }}>
-              <InputLabel>Yıl</InputLabel>
-              <Select
-                value={filterYear}
-                label="Yıl"
-                onChange={(e) => setFilterYear(e.target.value)}
-              >
-                {years.map((y) => (
-                  <MenuItem key={y} value={y}>{y}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel>Lütfen depo seçiniz</InputLabel>
-              <Select
-                value={filterDepot}
-                label="Lütfen depo seçiniz"
-                onChange={(e) => setFilterDepot(e.target.value)}
-              >
-                {depots.map((d) => (
-                  <MenuItem key={d} value={d}>{d}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 160 }}>
-              <InputLabel>Ürün Kodu</InputLabel>
-              <Select
-                value={filterProduct}
-                label="Ürün Kodu"
-                onChange={(e) => setFilterProduct(e.target.value)}
-              >
-                {productCodes.map((p) => (
-                  <MenuItem key={p} value={p}>{p}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl sx={{ minWidth: 160 }}>
-              <InputLabel>Sıralama</InputLabel>
-              <Select
-                value={filterSort}
-                label="Sıralama"
-                onChange={(e) => setFilterSort(e.target.value)}
-              >
-                {sortOptions.map((s) => (
-                  <MenuItem key={s} value={s}>{s}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TextField
-              label="Minimum Stok"
-              type="number"
-              value={filterMinStock}
-              onChange={(e) => setFilterMinStock(e.target.value)}
-              sx={{ minWidth: 140 }}
+        <DialogContent sx={{ p: 0 }}>
+          {collectionId && token && (
+            <FilterPanel
+              collectionId={collectionId}
+              token={token}
+              onFiltersChange={handleFiltersChange}
+              filterData={filterData}
+              loadingFilters={loadingFilters}
             />
-            <TextField
-              label="Maksimum Stok"
-              type="number"
-              value={filterMaxStock}
-              onChange={(e) => setFilterMaxStock(e.target.value)}
-              sx={{ minWidth: 140 }}
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={filterAllSizes}
-                  onChange={(e) => setFilterAllSizes(e.target.checked)}
-                />
-              }
-              label="Tüm Bedenlerinde Stok Olanlar"
-              sx={{ minWidth: 220 }}
-            />
-          </Box>
-         
-        
+          )}
         </DialogContent>
-        <DialogActions sx={{ justifyContent: 'center', gap: 2, pb: 2 }}>
-          <Button variant="contained" color="inherit" onClick={handleClearFilters} sx={{ minWidth: 180, fontWeight: 'bold' }}>
-            Seçimi Temizle
-          </Button>
-          <Button variant="outlined" color="primary" onClick={handleApplyFilters} sx={{ minWidth: 180, fontWeight: 'bold' }}>
-            Ara
-          </Button>
-        </DialogActions>
       </Dialog>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <Box sx={{ display: 'flex', gap: 4 }}>
-          {/* Koleksiyon Ürünleri */}
+
           <Box sx={{ flex: 1 }}>
             <Paper sx={{ p: 2, maxHeight: '75vh', overflowY: 'auto' }}>
               <Typography variant="h6" gutterBottom>
                 Koleksiyon Ürünleri
               </Typography>
-              <Grid container spacing={2}>
-                {allProducts.map((product) => (
-                  <Grid item key={product.productCode}>
-                    <DraggableProduct product={product} />
-                  </Grid>
-                ))}
-              </Grid>
+              {allProducts.length === 0 ? (
+                <Box 
+                  display="flex" 
+                  alignItems="center" 
+                  justifyContent="center" 
+                  minHeight={200}
+                  sx={{ 
+                    border: '2px dashed #ccc', 
+                    borderRadius: 2, 
+                    backgroundColor: '#f5f5f5' 
+                  }}
+                >
+                  <Typography variant="h6" color="text.secondary">
+                    Ürün bulunmamaktadır
+                  </Typography>
+                </Box>
+              ) : (
+                <Box display="grid" gridTemplateColumns="repeat(auto-fill, minmax(150px, 1fr))" gap={2}>
+                  {allProducts.map((product) => (
+                    <DraggableProduct key={product.productCode} product={product} />
+                  ))}
+                </Box>
+              )}
             </Paper>
           </Box>
-
-          {/* Sabitler */}
+          {allProducts.length > 0 && (
+          
           <Box sx={{ flex: 1 }}>
             <Paper sx={{ p: 2, maxHeight: '75vh', overflowY: 'auto' }}>
               <Typography variant="h6" gutterBottom>
@@ -456,39 +360,37 @@ export default function EditConstants() {
               >
                 <DroppableContainer id="constants">
                   {constants.map((product) => (
-                    <Grid item key={product.productCode}>
-                      <SortableProduct product={product} onRemove={handleRemoveConstant} />
-                    </Grid>
+                    <SortableProduct key={product.productCode} product={product} onRemove={handleRemoveConstant} />
                   ))}
 
                   {/* Boş slotlar */}
                   {Array.from({ length: allProducts.length - constants.length }, (_, i) => (
-                    <Grid item key={`empty-slot-${i}`}>
-                      <Box
-                        sx={{
-                          width: 150,
-                          height: 220,
-                          border: '2px dashed #90caf9',
-                          borderRadius: 2,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          backgroundColor: '#e3f2fd',
-                          transition: '0.2s',
-                          '&:hover': {
-                            borderColor: '#42a5f5',
-                            backgroundColor: '#bbdefb',
-                          },
-                        }}
-                      >
-                        <Typography variant="h4" color="primary">+</Typography>
-                      </Box>
-                    </Grid>
+                    <Box
+                      key={`empty-slot-${i}`}
+                      sx={{
+                        width: 150,
+                        height: 220,
+                        border: '2px dashed #90caf9',
+                        borderRadius: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: '#e3f2fd',
+                        transition: '0.2s',
+                        '&:hover': {
+                          borderColor: '#42a5f5',
+                          backgroundColor: '#bbdefb',
+                        },
+                      }}
+                    >
+                      <Typography variant="h4" color="primary">+</Typography>
+                    </Box>
                   ))}
                 </DroppableContainer>
               </SortableContext>
             </Paper>
           </Box>
+        )}
         </Box>
       </DndContext>
 
