@@ -1,5 +1,6 @@
 'use client'
 
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -10,8 +11,19 @@ import {
   Typography,
   Paper,
   Container,
+  Dialog,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
+  Checkbox,
+  FormControlLabel,
+  IconButton,
+  Slide
 } from '@mui/material'
-import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAppSelector } from '../../store/hooks'
 
@@ -31,6 +43,7 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
+import CloseIcon from '@mui/icons-material/Close'
 
 interface Product {
   productCode: string
@@ -166,6 +179,15 @@ function DroppableContainer({ id, children }: { id: string, children: React.Reac
   )
 }
 
+const years = [2022, 2023, 2024];
+const depots = ['Merkez', 'Şube 1', 'Şube 2'];
+const productCodes = ['PRD001', 'PRD002', 'PRD003'];
+const sortOptions = ['Stok Artan', 'Stok Azalan', 'Yıla Göre'];
+
+const Transition = React.forwardRef(function Transition(props: any, ref) {
+  return <Slide direction="up" ref={ref} {...props} />;
+});
+
 export default function EditConstants() {
   const searchParams = useSearchParams()
   const collectionId = searchParams.get('id')
@@ -174,6 +196,15 @@ export default function EditConstants() {
 
   const [allProducts, setAllProducts] = useState<Product[]>([])
   const [constants, setConstants] = useState<Product[]>([])
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterYear, setFilterYear] = useState('');
+  const [filterDepot, setFilterDepot] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
+  const [filterSort, setFilterSort] = useState('');
+  const [filterMinStock, setFilterMinStock] = useState('');
+  const [filterMaxStock, setFilterMaxStock] = useState('');
+  const [filterAllSizes, setFilterAllSizes] = useState(false);
+  const [appliedFilters, setAppliedFilters] = useState<any[]>([]);
 
   useEffect(() => {
     if (!token) {
@@ -242,26 +273,159 @@ export default function EditConstants() {
     if (!collectionId) return
     const productCodes = constants.map((p) => p.productCode)
 
-    const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/${collectionId}/UpdateConstants`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ constants: productCodes }),
-    })
+   
 
-    if (res.ok) {
+   
       alert('Sabitler başarıyla kaydedildi!')
       router.push('/collections')
-    } else {
-      const error = await res.json()
-      alert('Hata: ' + (error.message || 'Bilinmeyen bir hata'))
-    }
+
+    
   }
+
+  const handleApplyFilters = () => {
+    const filters = [];
+    if (filterYear) filters.push({ label: 'Yıl', value: filterYear });
+    if (filterDepot) filters.push({ label: 'Depo', value: filterDepot });
+    if (filterProduct) filters.push({ label: 'Ürün Kodu', value: filterProduct });
+    if (filterMinStock) filters.push({ label: 'Min Stok', value: filterMinStock });
+    if (filterMaxStock) filters.push({ label: 'Max Stok', value: filterMaxStock });
+    if (filterAllSizes) filters.push({ label: 'Tüm Bedenlerde Stok Olanlar', value: 'Evet' });
+    if (filterSort) filters.push({ label: 'Sıralama', value: filterSort });
+    setAppliedFilters(filters);
+    setFilterOpen(false);
+    if (filters.length === 0) {
+      alert('Filtre seçilmedi');
+    } else {
+      alert(filters.map(f => `${f.label}: ${f.value}`).join('\n'));
+    }
+  };
+
+  const handleClearFilters = () => {
+    setFilterYear('');
+    setFilterDepot('');
+    setFilterProduct('');
+    setFilterSort('');
+    setFilterMinStock('');
+    setFilterMaxStock('');
+    setFilterAllSizes(false);
+    setAppliedFilters([]);
+  };
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Box display="flex" justifyContent="flex-end" mb={2}>
+        <Button variant="outlined" onClick={() => setFilterOpen(true)}>
+          Filtrele
+        </Button>
+      </Box>
+      <Dialog
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        TransitionComponent={Transition}
+        fullWidth
+        maxWidth="md"
+        sx={{
+          '& .MuiDialog-container': {
+            alignItems: 'flex-end',
+          },
+        }}
+        PaperProps={{
+          sx: { borderRadius: '24px 24px 0 0', m: 0, pb: 2 },
+        }}
+      >
+        <DialogContent>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6" fontWeight="bold">Filtreler</Typography>
+            <IconButton onClick={() => setFilterOpen(false)}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          <Box display="flex" flexWrap="wrap" gap={2}>
+            <FormControl sx={{ minWidth: 160 }}>
+              <InputLabel>Yıl</InputLabel>
+              <Select
+                value={filterYear}
+                label="Yıl"
+                onChange={(e) => setFilterYear(e.target.value)}
+              >
+                {years.map((y) => (
+                  <MenuItem key={y} value={y}>{y}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 180 }}>
+              <InputLabel>Lütfen depo seçiniz</InputLabel>
+              <Select
+                value={filterDepot}
+                label="Lütfen depo seçiniz"
+                onChange={(e) => setFilterDepot(e.target.value)}
+              >
+                {depots.map((d) => (
+                  <MenuItem key={d} value={d}>{d}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 160 }}>
+              <InputLabel>Ürün Kodu</InputLabel>
+              <Select
+                value={filterProduct}
+                label="Ürün Kodu"
+                onChange={(e) => setFilterProduct(e.target.value)}
+              >
+                {productCodes.map((p) => (
+                  <MenuItem key={p} value={p}>{p}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl sx={{ minWidth: 160 }}>
+              <InputLabel>Sıralama</InputLabel>
+              <Select
+                value={filterSort}
+                label="Sıralama"
+                onChange={(e) => setFilterSort(e.target.value)}
+              >
+                {sortOptions.map((s) => (
+                  <MenuItem key={s} value={s}>{s}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField
+              label="Minimum Stok"
+              type="number"
+              value={filterMinStock}
+              onChange={(e) => setFilterMinStock(e.target.value)}
+              sx={{ minWidth: 140 }}
+            />
+            <TextField
+              label="Maksimum Stok"
+              type="number"
+              value={filterMaxStock}
+              onChange={(e) => setFilterMaxStock(e.target.value)}
+              sx={{ minWidth: 140 }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={filterAllSizes}
+                  onChange={(e) => setFilterAllSizes(e.target.checked)}
+                />
+              }
+              label="Tüm Bedenlerinde Stok Olanlar"
+              sx={{ minWidth: 220 }}
+            />
+          </Box>
+         
+        
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'center', gap: 2, pb: 2 }}>
+          <Button variant="contained" color="inherit" onClick={handleClearFilters} sx={{ minWidth: 180, fontWeight: 'bold' }}>
+            Seçimi Temizle
+          </Button>
+          <Button variant="outlined" color="primary" onClick={handleApplyFilters} sx={{ minWidth: 180, fontWeight: 'bold' }}>
+            Ara
+          </Button>
+        </DialogActions>
+      </Dialog>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <Box sx={{ display: 'flex', gap: 4 }}>
           {/* Koleksiyon Ürünleri */}

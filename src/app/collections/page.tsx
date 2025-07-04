@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useAppSelector } from '../../store/hooks'
+import { useAppSelector, useAppDispatch } from '../../store/hooks'
 import {
   Box,
   Button,
@@ -19,6 +19,12 @@ import {
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import {
+  fetchCollections,
+  fetchCollectionProducts,
+  setPage,
+  clearProducts,
+} from '../../store/slices/collection'
 
 interface FilterItem {
   id: string
@@ -44,76 +50,43 @@ interface Meta {
 }
 
 export default function CollectionsPage() {
-  const [collections, setCollections] = useState<Collection[]>([])
-  const [meta, setMeta] = useState<Meta | null>(null)
-  const [page, setPage] = useState(1)
-  const [openProducts, setOpenProducts] = useState<{ [key: string]: any[] }>({})
-  const [loadingProducts, setLoadingProducts] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const dispatch = useAppDispatch();
+  const { token } = useAppSelector((state) => state.auth);
+  const {
+    collections,
+    meta,
+    page,
+    openProducts,
+    loading,
+    loadingProducts,
+    error,
+  } = useAppSelector((state) => state.collection);
 
-  const router = useRouter()
-  const { token } = useAppSelector((state) => state.auth)
+  const router = useRouter();
 
   useEffect(() => {
     if (!token) {
-      router.replace('/')
-      return
+      router.replace('/');
+      return;
     }
-
-    const fetchCollections = async () => {
-      try {
-        const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/GetAll?page=${page}&pageSize=10`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        })
-        const data = await res.json()
-        setCollections(data.data)
-        setMeta(data.meta)
-      } catch (err) {
-        setError('Koleksiyonlar yüklenemedi.')
-      }
-    }
-
-    fetchCollections()
-  }, [token, router, page])
+    dispatch(fetchCollections({ token, page }));
+  }, [token, router, page, dispatch]);
 
   const handleEdit = (id: string) => {
-    router.push(`/edit?id=${id}`)
-  }
+    router.push(`/edit?id=${id}`);
+  };
 
-  const handleShowProducts = async (collectionId: string | number) => {
+  const handleShowProducts = (collectionId: string | number) => {
     if (openProducts[collectionId]) {
-      setOpenProducts((prev) => {
-        const copy = { ...prev }
-        delete copy[collectionId]
-        return copy
-      })
-      return
+      dispatch(clearProducts(collectionId));
+      return;
     }
-
-    setLoadingProducts(collectionId.toString())
-
-    try {
-      const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetProductsForConstants`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ additionalFilters: [], page: 1, pageSize: 36 }),
-      })
-      const data = await res.json()
-      setOpenProducts((prev) => ({ ...prev, [collectionId]: data.data.data || [] }))
-    } catch (err) {
-      setError('Ürünler yüklenemedi.')
-    } finally {
-      setLoadingProducts(null)
+    if (token) {
+      dispatch(fetchCollectionProducts({ token, collectionId }));
     }
-  }
+  };
 
-  if (!token) return null
+  if (!token) return null;
 
   return (
     <Box p={4}>
@@ -130,66 +103,73 @@ export default function CollectionsPage() {
           <Box flex={2} fontWeight="bold">Satış Kanalı</Box>
           <Box flex={2} fontWeight="bold">İşlemler</Box>
         </Box>
-        {collections.map((collection) => (
-          <Box key={collection.id} borderBottom={1} borderColor="grey.200">
-            <Box display="flex" alignItems="center" px={2} py={2}>
-              <Box flex={3}>{collection.info?.name || '—'}</Box>
-              <Box flex={5}>
-                {collection.filters?.filters?.length ? (
-                  collection.filters.filters.map((f, i) => (
-                    <Typography variant="body2" key={i}>
-                      Ürün {f.title} bilgisi Şuna Eşit: <b>{f.valueName}</b>
-                    </Typography>
-                  ))
-                ) : (
-                  <Typography variant="body2" color="text.secondary" fontStyle="italic">
-                    Koşul yok
-                  </Typography>
-                )}
-              </Box>
-              <Box flex={2}>Satış Kanalı - {collection.salesChannelId}</Box>
-              <Box flex={2} display="flex" gap={1}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  size="small"
-                  onClick={() => handleEdit(collection.id.toString())}
-                  sx={{ fontWeight: 'bold', borderRadius: 2 }}
-                >
-                  Sabitleri Düzenle
-                </Button>
-              </Box>
-            </Box>
-            <Collapse in={!!openProducts[collection.id]} timeout="auto" unmountOnExit>
-              <Box bgcolor="grey.50" px={3} py={2}>
-                {loadingProducts === collection.id.toString() ? (
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CircularProgress size={20} />
-                    <Typography color="primary">Ürünler yükleniyor...</Typography>
-                  </Box>
-                ) : openProducts[collection.id]?.length === 0 ? (
-                  <Typography color="text.secondary">Ürün bulunamadı.</Typography>
-                ) : (
-                  <Grid container spacing={2}>
-                    {openProducts[collection.id]?.map((product: any) => (
-                      <Grid item xs={6} md={3} key={product.productCode}>
-                        <Card elevation={1} sx={{ borderRadius: 2, p: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                          <Box
-                            component="img"
-                            src={product.imageUrl || '/window.svg'}
-                            alt={product.name}
-                            sx={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 2, mb: 1, bgcolor: 'white', border: 1, borderColor: 'grey.200' }}
-                          />
-                          <Typography variant="body2" align="center">{product.name}</Typography>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
-                )}
-              </Box>
-            </Collapse>
+        {loading ? (
+          <Box display="flex" justifyContent="center" alignItems="center" py={4}>
+            <CircularProgress />
           </Box>
-        ))}
+        ) : (
+          collections.map((collection) => (
+            <Box key={collection.id} borderBottom={1} borderColor="grey.200">
+              <Box display="flex" alignItems="center" px={2} py={2}>
+                <Box flex={3}>{collection.info?.name || '—'}</Box>
+                <Box flex={5}>
+                  {collection.filters?.filters?.length ? (
+                    collection.filters.filters.map((f, i) => (
+                      <Typography variant="body2" key={i}>
+                        Ürün {f.title} bilgisi Şuna Eşit: <b>{f.valueName}</b>
+                      </Typography>
+                    ))
+                  ) : (
+                    <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                      Koşul yok
+                    </Typography>
+                  )}
+                </Box>
+                <Box flex={2}>Satış Kanalı - {collection.salesChannelId}</Box>
+                <Box flex={2} display="flex" gap={1}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => handleEdit(collection.id.toString())}
+                    sx={{ fontWeight: 'bold', borderRadius: 2 }}
+                  >
+                    Sabitleri Düzenle
+                  </Button>
+                
+                </Box>
+              </Box>
+              <Collapse in={!!openProducts[collection.id]} timeout="auto" unmountOnExit>
+                <Box bgcolor="grey.50" px={3} py={2}>
+                  {loadingProducts === collection.id.toString() ? (
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <CircularProgress size={20} />
+                      <Typography color="primary">Ürünler yükleniyor...</Typography>
+                    </Box>
+                  ) : openProducts[collection.id]?.length === 0 ? (
+                    <Typography color="text.secondary">Ürün bulunamadı.</Typography>
+                  ) : (
+                    <Grid container spacing={2}>
+                      {openProducts[collection.id]?.map((product: any) => (
+                        <Grid item xs={6} md={3} key={product.productCode}>
+                          <Card elevation={1} sx={{ borderRadius: 2, p: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <Box
+                              component="img"
+                              src={product.imageUrl || '/window.svg'}
+                              alt={product.name}
+                              sx={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 2, mb: 1, bgcolor: 'white', border: 1, borderColor: 'grey.200' }}
+                            />
+                            <Typography variant="body2" align="center">{product.name}</Typography>
+                          </Card>
+                        </Grid>
+                      ))}
+                    </Grid>
+                  )}
+                </Box>
+              </Collapse>
+            </Box>
+          ))
+        )}
       </Paper>
       {/* Sayfalama */}
       {meta && (
@@ -201,7 +181,7 @@ export default function CollectionsPage() {
                 variant={page === p ? 'contained' : 'outlined'}
                 color={page === p ? 'primary' : 'inherit'}
                 size="small"
-                onClick={() => setPage(p)}
+                onClick={() => dispatch(setPage(p))}
                 sx={{ minWidth: 36, fontWeight: 'bold', borderRadius: 2 }}
               >
                 {p}
@@ -209,7 +189,7 @@ export default function CollectionsPage() {
             ))}
             {meta.hasNextPage && (
               <Button
-                onClick={() => setPage((prev) => prev + 1)}
+                onClick={() => dispatch(setPage(page + 1))}
                 variant="outlined"
                 size="small"
                 sx={{ minWidth: 36, borderRadius: 2 }}
@@ -221,5 +201,5 @@ export default function CollectionsPage() {
         </Box>
       )}
     </Box>
-  )
+  );
 }

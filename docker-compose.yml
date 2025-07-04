@@ -8,3 +8,8 @@ services:
       - NEXTAUTH_URL=http://localhost:3000
       - NEXTAUTH_SECRET=secret
       - API_BASE_URL=https://api.example.com
+    # Geliştirici için hot-reload (opsiyonel):
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run dev
