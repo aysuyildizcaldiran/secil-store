@@ -2,6 +2,7 @@ import './globals.css';
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import ClientLayout from './ClientLayout';
+import SessionClientProvider from './SessionClientProvider';
 
 export const metadata: Metadata = {
   title: 'Secil Store',
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="tr">
       <body>
-        <ClientLayout>{children}</ClientLayout>
+        <SessionClientProvider>
+          <ClientLayout>{children}</ClientLayout>
+        </SessionClientProvider>
       </body>
     </html>
   );

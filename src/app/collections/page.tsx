@@ -3,6 +3,22 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppSelector } from '../../store/hooks'
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardActions,
+  CircularProgress,
+  Grid,
+  Paper,
+  Typography,
+  Collapse,
+  Alert,
+  IconButton,
+} from '@mui/material'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 
 interface FilterItem {
   id: string
@@ -12,21 +28,10 @@ interface FilterItem {
 }
 
 interface Collection {
-  id: string | number
-  info?: {
-    id: number
-    name: string
-    description: string
-    url: string
-    langCode: string
-  }
-  filters?: {
-    useOrLogic: boolean
-    filters: FilterItem[] | null
-  }
-  products?: any[]
-  salesChannelId?: number
-  type?: number
+  id: string
+  info?: { name?: string }
+  filters?: { filters?: FilterItem[] }
+  salesChannelId?: string
 }
 
 interface Meta {
@@ -42,11 +47,12 @@ export default function CollectionsPage() {
   const [collections, setCollections] = useState<Collection[]>([])
   const [meta, setMeta] = useState<Meta | null>(null)
   const [page, setPage] = useState(1)
+  const [openProducts, setOpenProducts] = useState<{ [key: string]: any[] }>({})
+  const [loadingProducts, setLoadingProducts] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const router = useRouter()
   const { token } = useAppSelector((state) => state.auth)
-  const [openProducts, setOpenProducts] = useState<{ [key: string]: any[] }>({})
-  const [loadingProducts, setLoadingProducts] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) {
@@ -55,15 +61,19 @@ export default function CollectionsPage() {
     }
 
     const fetchCollections = async () => {
-      const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/GetAll?page=${page}&pageSize=10`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      const data = await res.json()
-      setCollections(data.data)
-      setMeta(data.meta)
+      try {
+        const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/GetAll?page=${page}&pageSize=10`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        const data = await res.json()
+        setCollections(data.data)
+        setMeta(data.meta)
+      } catch (err) {
+        setError('Koleksiyonlar yüklenemedi.')
+      }
     }
 
     fetchCollections()
@@ -85,133 +95,131 @@ export default function CollectionsPage() {
 
     setLoadingProducts(collectionId.toString())
 
-    const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetProductsForConstants`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ additionalFilters: [], page: 1, pageSize: 36 }),
-    })
-
-    const data = await res.json()
-    setOpenProducts((prev) => ({ ...prev, [collectionId]: data.data.data || [] }))
-    setLoadingProducts(null)
+    try {
+      const res = await fetch(`https://maestro-api-dev.secil.biz/Collection/${collectionId}/GetProductsForConstants`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ additionalFilters: [], page: 1, pageSize: 36 }),
+      })
+      const data = await res.json()
+      setOpenProducts((prev) => ({ ...prev, [collectionId]: data.data.data || [] }))
+    } catch (err) {
+      setError('Ürünler yüklenemedi.')
+    } finally {
+      setLoadingProducts(null)
+    }
   }
 
   if (!token) return null
 
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Koleksiyon Listesi</h1>
-
-      <div className="border rounded overflow-hidden">
-        {/* Başlık satırı */}
-        <div className="grid grid-cols-12 bg-gray-100 text-sm font-semibold text-gray-700 border-b">
-          <div className="col-span-3 p-3 border-r">Başlık</div>
-          <div className="col-span-5 p-3 border-r">Ürün Koşulları</div>
-          <div className="col-span-2 p-3 border-r">Satış Kanalı</div>
-          <div className="col-span-2 p-3">İşlemler</div>
-        </div>
-
-        {/* Veri satırları */}
+    <Box p={4}>
+      <Typography variant="h4" fontWeight="bold" mb={4}>
+        Koleksiyon Listesi
+      </Typography>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+      )}
+      <Paper elevation={3} sx={{ borderRadius: 3, overflow: 'hidden' }}>
+        <Box display="flex" bgcolor="grey.100" px={2} py={1.5}>
+          <Box flex={3} fontWeight="bold">Başlık</Box>
+          <Box flex={5} fontWeight="bold">Ürün Koşulları</Box>
+          <Box flex={2} fontWeight="bold">Satış Kanalı</Box>
+          <Box flex={2} fontWeight="bold">İşlemler</Box>
+        </Box>
         {collections.map((collection) => (
-          <div key={collection.id}>
-            <div className="grid grid-cols-12 border-b text-sm text-gray-800">
-              <div className="col-span-3 p-3 border-r">
-                {collection.info?.name || '—'}
-              </div>
-
-              <div className="col-span-5 p-3 border-r space-y-1">
+          <Box key={collection.id} borderBottom={1} borderColor="grey.200">
+            <Box display="flex" alignItems="center" px={2} py={2}>
+              <Box flex={3}>{collection.info?.name || '—'}</Box>
+              <Box flex={5}>
                 {collection.filters?.filters?.length ? (
                   collection.filters.filters.map((f, i) => (
-                    <div key={i}>
-                      Ürün {f.title} bilgisi Şuna Eşit: <strong>{f.valueName}</strong>
-                    </div>
+                    <Typography variant="body2" key={i}>
+                      Ürün {f.title} bilgisi Şuna Eşit: <b>{f.valueName}</b>
+                    </Typography>
                   ))
                 ) : (
-                  <span className="text-gray-400 italic">Koşul yok</span>
+                  <Typography variant="body2" color="text.secondary" fontStyle="italic">
+                    Koşul yok
+                  </Typography>
                 )}
-              </div>
-
-              <div className="col-span-2 p-3 border-r">
-                Satış Kanalı - {collection.salesChannelId}
-              </div>
-
-              <div className="col-span-2 p-3 flex gap-3 items-start">
-                <button
+              </Box>
+              <Box flex={2}>Satış Kanalı - {collection.salesChannelId}</Box>
+              <Box flex={2} display="flex" gap={1}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
                   onClick={() => handleEdit(collection.id.toString())}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-3 rounded shadow transition text-sm"
+                  sx={{ fontWeight: 'bold', borderRadius: 2 }}
                 >
                   Sabitleri Düzenle
-                </button>
-              </div>
-            </div>
-
-            {/* Ürünler */}
-            {loadingProducts === collection.id.toString() && (
-              <div className="p-4 text-blue-500 border-b">Ürünler yükleniyor...</div>
-            )}
-
-            {openProducts[collection.id] && (
-              <div className="border-b bg-gray-50 p-4">
-                {openProducts[collection.id].length === 0 ? (
-                  <div>Ürün bulunamadı.</div>
+                </Button>
+              </Box>
+            </Box>
+            <Collapse in={!!openProducts[collection.id]} timeout="auto" unmountOnExit>
+              <Box bgcolor="grey.50" px={3} py={2}>
+                {loadingProducts === collection.id.toString() ? (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <CircularProgress size={20} />
+                    <Typography color="primary">Ürünler yükleniyor...</Typography>
+                  </Box>
+                ) : openProducts[collection.id]?.length === 0 ? (
+                  <Typography color="text.secondary">Ürün bulunamadı.</Typography>
                 ) : (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {openProducts[collection.id].map((product) => (
-                      <div
-                        key={product.productCode}
-                        className="border rounded p-2 flex flex-col items-center"
-                      >
-                        <img
-                          src={product.imageUrl || '/window.svg'}
-                          alt={product.name}
-                          className="w-18 h-18 object-contain rounded shadow mb-2 bg-white border"
-                          style={{ width: '72px', height: '72px' }}
-                        />
-                        <div className="text-sm text-center">{product.name}</div>
-                      </div>
+                  <Grid container spacing={2}>
+                    {openProducts[collection.id]?.map((product: any) => (
+                      <Grid item xs={6} md={3} key={product.productCode}>
+                        <Card elevation={1} sx={{ borderRadius: 2, p: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <Box
+                            component="img"
+                            src={product.imageUrl || '/window.svg'}
+                            alt={product.name}
+                            sx={{ width: 72, height: 72, objectFit: 'contain', borderRadius: 2, mb: 1, bgcolor: 'white', border: 1, borderColor: 'grey.200' }}
+                          />
+                          <Typography variant="body2" align="center">{product.name}</Typography>
+                        </Card>
+                      </Grid>
                     ))}
-                  </div>
+                  </Grid>
                 )}
-              </div>
-            )}
-          </div>
+              </Box>
+            </Collapse>
+          </Box>
         ))}
-      </div>
-
+      </Paper>
       {/* Sayfalama */}
       {meta && (
-        <div className="flex justify-end mt-6">
-          <ul className="flex space-x-1">
+        <Box display="flex" justifyContent="flex-end" mt={4}>
+          <Box display="flex" gap={1}>
             {Array.from({ length: meta.totalPages }, (_, i) => i + 1).map((p) => (
-              <li key={p}>
-                <button
-                  onClick={() => setPage(p)}
-                  className={`px-3 py-1 rounded ${
-                    page === p
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-white border border-gray-300 text-gray-700'
-                  }`}
-                >
-                  {p}
-                </button>
-              </li>
+              <Button
+                key={p}
+                variant={page === p ? 'contained' : 'outlined'}
+                color={page === p ? 'primary' : 'inherit'}
+                size="small"
+                onClick={() => setPage(p)}
+                sx={{ minWidth: 36, fontWeight: 'bold', borderRadius: 2 }}
+              >
+                {p}
+              </Button>
             ))}
             {meta.hasNextPage && (
-              <li>
-                <button
-                  onClick={() => setPage((prev) => prev + 1)}
-                  className="px-3 py-1 border border-gray-300 bg-white text-gray-700 rounded"
-                >
-                  &gt;
-                </button>
-              </li>
+              <Button
+                onClick={() => setPage((prev) => prev + 1)}
+                variant="outlined"
+                size="small"
+                sx={{ minWidth: 36, borderRadius: 2 }}
+              >
+                &gt;
+              </Button>
             )}
-          </ul>
-        </div>
+          </Box>
+        </Box>
       )}
-    </main>
+    </Box>
   )
 }

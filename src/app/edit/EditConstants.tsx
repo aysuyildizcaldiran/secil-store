@@ -1,14 +1,169 @@
 'use client'
 
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardMedia,
+  Grid,
+  Typography,
+  Paper,
+  Container,
+} from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAppSelector } from '../../store/hooks'
-import { DragDropContext, Droppable, Draggable, DropResult } from 'react-beautiful-dnd'
+
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  arrayMove,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
 
 interface Product {
   productCode: string
   name: string
   imgUrl: string
+}
+
+function ProductCard({
+  product,
+  listeners,
+  attributes,
+  setNodeRef,
+  transform,
+  transition,
+  isDragging,
+}: any) {
+  return (
+    <Card
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      sx={{
+        width: 150,
+        height: 220,
+        opacity: isDragging ? 0.5 : 1,
+        transform: CSS.Transform.toString(transform),
+        transition,
+        cursor: 'move',
+        userSelect: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }}
+    >
+      <Box
+        sx={{
+          height: 120,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}
+      >
+        <CardMedia
+          component="img"
+          image={product.imgUrl}
+          alt={product.name}
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+          }}
+        />
+      </Box>
+      <CardContent sx={{ textAlign: 'center', p: 1 }}>
+        <Typography variant="subtitle2" fontWeight={600} noWrap>
+          {product.name}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" noWrap>
+          {product.productCode}
+        </Typography>
+      </CardContent>
+    </Card>
+  )
+}
+
+function DraggableProduct({ product }: { product: Product }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: product.productCode })
+  return (
+    <ProductCard
+      product={product}
+      attributes={attributes}
+      listeners={listeners}
+      setNodeRef={setNodeRef}
+      transform={transform}
+      isDragging={isDragging}
+    />
+  )
+}
+
+function SortableProduct({
+  product,
+  onRemove,
+}: {
+  product: Product
+  onRemove?: (productCode: string) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: product.productCode })
+
+  return (
+    <Box sx={{ position: 'relative' }}>
+      {onRemove && (
+        <Button
+          size="small"
+          onClick={() => onRemove(product.productCode)}
+          sx={{
+            position: 'absolute',
+            top: 4,
+            right: 4,
+            minWidth: 0,
+            padding: '2px 6px',
+            zIndex: 1,
+            backgroundColor: 'white',
+            border: '1px solid #ccc',
+            '&:hover': {
+              backgroundColor: '#f44336',
+              color: 'white',
+            },
+          }}
+        >
+          ✕
+        </Button>
+      )}
+      <ProductCard
+        product={product}
+        attributes={attributes}
+        listeners={listeners}
+        setNodeRef={setNodeRef}
+        transform={transform}
+        transition={transition}
+        isDragging={isDragging}
+      />
+    </Box>
+  )
+}
+
+function DroppableContainer({ id, children }: { id: string, children: React.ReactNode }) {
+  const { setNodeRef } = useDroppable({ id })
+  return (
+    <Grid container spacing={2} ref={setNodeRef} minHeight={140}>
+      {children}
+    </Grid>
+  )
 }
 
 export default function EditConstants() {
@@ -45,42 +200,42 @@ export default function EditConstants() {
       setAllProducts(products)
       setConstants([])
     }
+
     fetchProducts()
-  }, [collectionId, token, router])
+  }, [collectionId, token])
 
-  const onDragEnd = (result: DropResult) => {
-    const { source, destination } = result
-    if (!destination) return
+  const sensors = useSensors(useSensor(PointerSensor))
 
-    if (source.droppableId === 'allProducts' && destination.droppableId === 'constants') {
-      const product = allProducts[source.index]
-      if (!constants.find((p) => p.productCode === product.productCode)) {
-        setConstants([...constants, product])
-        setAllProducts(allProducts.filter((p) => p.productCode !== product.productCode))
-      }
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over) return
+
+    const isInConstants = constants.some((p) => p.productCode === active.id)
+    const isOverConstants = over.id === 'constants' || constants.some((p) => p.productCode === over.id)
+
+    if (isInConstants && constants.some((p) => p.productCode === over.id) && active.id !== over.id) {
+      const oldIndex = constants.findIndex((p) => p.productCode === active.id)
+      const newIndex = constants.findIndex((p) => p.productCode === over.id)
+      setConstants((items) => arrayMove(items, oldIndex, newIndex))
+      return
     }
 
-    if (source.droppableId === 'constants' && destination.droppableId === 'allProducts') {
-      const product = constants[source.index]
-      if (!allProducts.find((p) => p.productCode === product.productCode)) {
-        setAllProducts([...allProducts, product])
-        setConstants(constants.filter((p) => p.productCode !== product.productCode))
-      }
+    const draggedItem = allProducts.find((p) => p.productCode === active.id)
+    if (
+      draggedItem &&
+      !constants.find((p) => p.productCode === draggedItem.productCode) &&
+      isOverConstants
+    ) {
+      setConstants((prev) => [...prev, draggedItem])
+      setAllProducts((prev) => prev.filter((p) => p.productCode !== draggedItem.productCode))
     }
+  }
 
-    if (source.droppableId === 'constants' && destination.droppableId === 'constants') {
-      const newConstants = Array.from(constants)
-      const [moved] = newConstants.splice(source.index, 1)
-      newConstants.splice(destination.index, 0, moved)
-      setConstants(newConstants)
-    }
-
-    if (source.droppableId === 'allProducts' && destination.droppableId === 'allProducts') {
-      const newAll = Array.from(allProducts)
-      const [moved] = newAll.splice(source.index, 1)
-      newAll.splice(destination.index, 0, moved)
-      setAllProducts(newAll)
-    }
+  const handleRemoveConstant = (productCode: string) => {
+    const removed = constants.find((p) => p.productCode === productCode)
+    if (!removed) return
+    setConstants((prev) => prev.filter((p) => p.productCode !== productCode))
+    setAllProducts((prev) => [...prev, removed])
   }
 
   const handleSave = async () => {
@@ -105,111 +260,82 @@ export default function EditConstants() {
     }
   }
 
-  if (!token) return null
-
   return (
-    <main className="p-6">
-      <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-2 gap-6">
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <Box sx={{ display: 'flex', gap: 4 }}>
           {/* Koleksiyon Ürünleri */}
-          <section className="bg-white border rounded-xl p-4 flex flex-col max-h-[70vh] overflow-y-auto">
-            <h2 className="font-semibold text-lg mb-2">Koleksiyon Ürünleri</h2>
-            <Droppable droppableId="allProducts">
-              {(provided) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className="grid grid-cols-3 gap-4 min-h-[120px]"
-                >
-                  {allProducts.length === 0 && (
-                    <div className="col-span-3 text-center text-gray-400 italic">Ürün kalmadı</div>
-                  )}
-                  {allProducts.map((product, idx) => (
-                    <Draggable key={product.productCode} draggableId={product.productCode} index={idx}>
-                      {(provided) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm user-select-none cursor-move"
-                          style={{ width: '96px', height: '180px' }}
-                        >
-                          <img
-                            src={product.imgUrl}
-                            alt={product.name}
-                            className="object-cover rounded mb-2 border bg-white"
-                            style={{ width: '96px', height: '128px' }}
-                          />
-                          <div className="font-medium text-sm text-center">{product.name}</div>
-                          <div className="text-xs text-gray-500">{product.productCode}</div>
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </section>
+          <Box sx={{ flex: 1 }}>
+            <Paper sx={{ p: 2, maxHeight: '75vh', overflowY: 'auto' }}>
+              <Typography variant="h6" gutterBottom>
+                Koleksiyon Ürünleri
+              </Typography>
+              <Grid container spacing={2}>
+                {allProducts.map((product) => (
+                  <Grid item key={product.productCode}>
+                    <DraggableProduct product={product} />
+                  </Grid>
+                ))}
+              </Grid>
+            </Paper>
+          </Box>
+
           {/* Sabitler */}
-          <section className="bg-white border rounded-xl p-4 flex flex-col max-h-[70vh] overflow-y-auto">
-            <h2 className="font-semibold text-lg mb-2">Sabitler</h2>
-            <Droppable droppableId="constants">
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={`grid grid-cols-3 gap-4 min-h-[120px] transition-all duration-200 ${
-                    snapshot.isDraggingOver ? 'bg-indigo-50 border-2 border-indigo-400' : ''
-                  }`}
-                  style={{ minHeight: 120, background: snapshot.isDraggingOver ? '#eef2ff' : undefined }}
-                >
-                  {constants.length === 0 && (
-                    <div className="col-span-3 text-center text-gray-400 italic">Sabit ürün yok</div>
-                  )}
-                  {constants.map((product, idx) => (
-                    <Draggable key={product.productCode} draggableId={product.productCode} index={idx}>
-                      {(provided) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className="border rounded-lg p-2 flex flex-col items-center bg-white shadow-sm user-select-none cursor-move"
-                          style={{ width: '96px', height: '180px' }}
-                        >
-                          <img
-                            src={product.imgUrl}
-                            alt={product.name}
-                            className="object-cover rounded mb-2 border bg-white"
-                            style={{ width: '96px', height: '128px' }}
-                          />
-                          <div className="font-medium text-sm text-center">{product.name}</div>
-                          <div className="text-xs text-gray-500">{product.productCode}</div>
-                        </div>
-                      )}
-                    </Draggable>
+          <Box sx={{ flex: 1 }}>
+            <Paper sx={{ p: 2, maxHeight: '75vh', overflowY: 'auto' }}>
+              <Typography variant="h6" gutterBottom>
+                Sabitler
+              </Typography>
+              <SortableContext
+                items={constants.map((p) => p.productCode)}
+                strategy={rectSortingStrategy}
+              >
+                <DroppableContainer id="constants">
+                  {constants.map((product) => (
+                    <Grid item key={product.productCode}>
+                      <SortableProduct product={product} onRemove={handleRemoveConstant} />
+                    </Grid>
                   ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </section>
-        </div>
-      </DragDropContext>
-      <div className="flex justify-end gap-4 mt-8">
-        <button
-          onClick={() => router.push('/collections')}
-          className="bg-gray-400 text-white px-6 py-2 rounded font-semibold"
-        >
+
+                  {/* Boş slotlar */}
+                  {Array.from({ length: allProducts.length - constants.length }, (_, i) => (
+                    <Grid item key={`empty-slot-${i}`}>
+                      <Box
+                        sx={{
+                          width: 150,
+                          height: 220,
+                          border: '2px dashed #90caf9',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          backgroundColor: '#e3f2fd',
+                          transition: '0.2s',
+                          '&:hover': {
+                            borderColor: '#42a5f5',
+                            backgroundColor: '#bbdefb',
+                          },
+                        }}
+                      >
+                        <Typography variant="h4" color="primary">+</Typography>
+                      </Box>
+                    </Grid>
+                  ))}
+                </DroppableContainer>
+              </SortableContext>
+            </Paper>
+          </Box>
+        </Box>
+      </DndContext>
+
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 4, gap: 2 }}>
+        <Button variant="outlined" color="inherit" onClick={() => router.push('/collections')}>
           Vazgeç
-        </button>
-        <button
-          onClick={handleSave}
-          className="bg-green-600 text-white px-6 py-2 rounded font-semibold"
-        >
+        </Button>
+        <Button variant="contained" color="success" onClick={handleSave}>
           Kaydet
-        </button>
-      </div>
-    </main>
+        </Button>
+      </Box>
+    </Container>
   )
-} 
+}
